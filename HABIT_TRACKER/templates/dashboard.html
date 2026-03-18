@@ -148,6 +148,7 @@
               </div>
 
               <div class="habit-actions" style="gap: 0.4rem;">
+                <button class="btn-icon" title="Statistics" onclick="toggleStats({{ habit.id }})">📊</button>
                 <form method="POST" action="{{ url_for('toggle_habit', habit_id=habit.id) }}" class="countable-form" style="margin:0; display:flex; align-items:center; gap:0.3rem;">
                   <input type="number" name="value" step="0.1" min="0"
                     class="countable-input" placeholder="0"
@@ -159,6 +160,18 @@
                       onsubmit="return confirm('Delete this habit?')">
                   <button type="submit" class="btn-icon" title="Delete">🗑️</button>
                 </form>
+              </div>
+
+              {# Statistics Panel #}
+              <div class="habit-stats-panel" id="stats-{{ habit.id }}" style="display: none;">
+                <div class="stats-tabs">
+                  <button class="stats-tab active" onclick="loadStats({{ habit.id }}, 'week', this)">📅 Week</button>
+                  <button class="stats-tab" onclick="loadStats({{ habit.id }}, 'month', this)">📆 Month</button>
+                  <button class="stats-tab" onclick="loadStats({{ habit.id }}, 'year', this)">📈 Year</button>
+                </div>
+                <div class="stats-content" id="stats-content-{{ habit.id }}">
+                  <div class="stats-loading">Loading...</div>
+                </div>
               </div>
 
             {% else %}
@@ -185,10 +198,28 @@
               </div>
 
               <div class="habit-actions">
+                <button class="btn-icon" title="Statistics" onclick="toggleStats({{ habit.id }})">📊</button>
+                <form method="POST" action="{{ url_for('toggle_habit', habit_id=habit.id) }}" style="margin:0;">
+                  <button type="submit" class="check-btn" title="{% if habit.completed_today %}Unmark{% else %}Complete{% endif %}">
+                    {% if habit.completed_today %}✓{% endif %}
+                  </button>
+                </form>
                 <form method="POST" action="{{ url_for('delete_habit', habit_id=habit.id) }}" style="margin:0;"
                       onsubmit="return confirm('Delete this habit?')">
                   <button type="submit" class="btn-icon" title="Delete">🗑️</button>
                 </form>
+              </div>
+
+              {# Statistics Panel #}
+              <div class="habit-stats-panel" id="stats-{{ habit.id }}" style="display: none;">
+                <div class="stats-tabs">
+                  <button class="stats-tab active" onclick="loadStats({{ habit.id }}, 'week', this)">📅 Week</button>
+                  <button class="stats-tab" onclick="loadStats({{ habit.id }}, 'month', this)">📆 Month</button>
+                  <button class="stats-tab" onclick="loadStats({{ habit.id }}, 'year', this)">📈 Year</button>
+                </div>
+                <div class="stats-content" id="stats-content-{{ habit.id }}">
+                  <div class="stats-loading">Loading...</div>
+                </div>
               </div>
             {% endif %}
 
@@ -399,5 +430,75 @@
       el.textContent = current;
     }, 40);
   });
-</script>
+  // ── Statistics Panel Functions ──────────────────
+  function toggleStats(habitId) {
+    const panel = document.getElementById(`stats-${habitId}`);
+    if (panel.style.display === 'none') {
+      panel.style.display = 'block';
+      panel.style.animation = 'fadeInUp 0.3s ease-out';
+      loadStats(habitId, 'week', document.querySelector(`#stats-${habitId} .stats-tab.active`));
+    } else {
+      panel.style.display = 'none';
+    }
+  }
+
+  function loadStats(habitId, period, btnEl) {
+    // Update active tab
+    document.querySelectorAll(`#stats-${habitId} .stats-tab`).forEach(b => b.classList.remove('active'));
+    btnEl.classList.add('active');
+
+    // Load stats from API
+    fetch(`/api/habit/${habitId}/stats?period=${period}`)
+      .then(r => r.json())
+      .then(data => displayStats(habitId, data))
+      .catch(err => {
+        document.getElementById(`stats-content-${habitId}`).innerHTML = `<div class="stats-error">Error loading stats</div>`;
+      });
+  }
+
+  function displayStats(habitId, data) {
+    const completionRate = data.completion_rate;
+    const completed = data.completed;
+    const totalDays = data.total_days;
+
+    let html = `
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-box-value">${completed}</div>
+          <div class="stat-box-label">Completed</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-value">${completionRate}%</div>
+          <div class="stat-box-label">Rate</div>
+        </div>
+    `;
+
+    if (data.total_value > 0) {
+      html += `
+        <div class="stat-box">
+          <div class="stat-box-value">${data.total_value}</div>
+          <div class="stat-box-label">Total</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-value">${data.avg_value}</div>
+          <div class="stat-box-label">Avg</div>
+        </div>
+      `;
+    }
+
+    html += `</div>
+      <div class="stats-chart">
+        <div class="chart-title">Daily Progress</div>
+        <div class="chart-bars-sm">`;
+
+    // Show chart bars for last 7 days (or less if month/year)
+    const chartData = data.data.slice(-7);
+    chartData.forEach(d => {
+      const val = d.value || (d.completed ? 1 : 0);
+      html += `<div class="chart-bar-sm" style="height: ${val > 0 ? val * 10 : 8}px;" title="${d.date}"></div>`;
+    });
+
+    html += `</div></div>`;
+    document.getElementById(`stats-content-${habitId}`).innerHTML = html;
+  }</script>
 {% endblock %}

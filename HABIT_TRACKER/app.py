@@ -41,6 +41,63 @@ def get_current_user():
     return db.session.get(User, session.get("user_id"))
 
 
+def get_habit_stats(habit, period="week"):
+    """Calculate statistics for a habit over different periods.
+    Periods: 'week', 'month', 'year'
+    """
+    today = date.today()
+    stats = {
+        "completed": 0,
+        "total_days": 0,
+        "total_value": 0,
+        "avg_value": 0,
+        "completion_rate": 0,
+        "best_day": 0,
+        "data": []
+    }
+    
+    if period == "week":
+        days_back = 7
+        days_range = 6
+    elif period == "month":
+        days_back = 30
+        days_range = 29
+    else:  # year
+        days_back = 365
+        days_range = 364
+    
+    start_date = today - timedelta(days=days_back)
+    completions = {c.completed_date: c for c in habit.completions if c.completed_date >= start_date}
+    
+    for i in range(days_range, -1, -1):
+        day = today - timedelta(days=i)
+        completion = completions.get(day)
+        
+        if completion:
+            stats["completed"] += 1
+            if habit.habit_type == "countable":
+                stats["total_value"] += completion.value
+                stats["best_day"] = max(stats["best_day"], completion.value)
+                stats["data"].append({"date": day.isoformat(), "value": completion.value})
+            else:
+                stats["data"].append({"date": day.isoformat(), "completed": True})
+        else:
+            if habit.habit_type == "countable":
+                stats["data"].append({"date": day.isoformat(), "value": 0})
+            else:
+                stats["data"].append({"date": day.isoformat(), "completed": False})
+        
+        stats["total_days"] += 1
+    
+    if stats["total_days"] > 0:
+        stats["completion_rate"] = int((stats["completed"] / stats["total_days"]) * 100)
+    
+    if habit.habit_type == "countable" and stats["completed"] > 0:
+        stats["avg_value"] = round(stats["total_value"] / stats["completed"], 2)
+    
+    return stats
+
+
 # ── HOME ──────────────────────────────────────────────────────
 @app.route("/")
 def home():
@@ -284,6 +341,29 @@ def logout():
     flash("You've been logged out.", "info")
     return redirect(url_for("home"))
 
+# ── HABIT STATISTICS API ──────────────────────────────────────
+@app.route("/api/habit/<int:habit_id>/stats", methods=["GET"])
+@login_required
+def get_habit_statistics(habit_id):
+    habit = Habit.query.get_or_404(habit_id)
+    if habit.user_id != session["user_id"]:
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    period = request.args.get("period", "week")  # week, month, year
+    stats = get_habit_stats(habit, period)
+    
+    return jsonify({
+        "habit_id": habit.id,
+        "habit_name": habit.name,
+        "period": period,
+        "completed": stats["completed"],
+        "total_days": stats["total_days"],
+        "completion_rate": stats["completion_rate"],
+        "total_value": round(stats["total_value"], 2),
+        "avg_value": stats["avg_value"],
+        "best_day": round(stats["best_day"], 2),
+        "data": stats["data"]
+    })
 
 if __name__ == "__main__":
     app.run(debug=True)
