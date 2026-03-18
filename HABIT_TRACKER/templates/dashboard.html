@@ -78,6 +78,23 @@
     </div>
   </div>
 
+  <!-- ═══ QUICK ADD TEMPLATES ═══ -->
+  <div class="templates-section">
+    <h3 class="templates-title">⚡ Quick Add Templates</h3>
+    <div class="templates-grid">
+      {% for template in templates %}
+        <form method="POST" action="{{ url_for('add_template_habit') }}" style="display: contents;">
+          <input type="hidden" name="template_name" value="{{ template.name }}">
+          <button type="submit" class="template-card" style="background: linear-gradient(135deg, {{ template.color }}15, {{ template.color }}08);">
+            <div class="template-icon">{{ template.icon }}</div>
+            <div class="template-name">{{ template.name }}</div>
+            <div class="template-target">{{ template.target }} {{ template.unit }}</div>
+          </button>
+        </form>
+      {% endfor %}
+    </div>
+  </div>
+
   <!-- ═══ HABITS LIST ═══ -->
   <div class="habits-section">
     <div class="section-header">

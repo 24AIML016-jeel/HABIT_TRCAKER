@@ -14,8 +14,19 @@ db.init_app(app)
 with app.app_context():
     db.create_all()
 
+# ── HABIT TEMPLATES ──────────────────────────────────────────
+HABIT_TEMPLATES = [
+    {"name": "Running", "icon": "🏃", "target": 5, "unit": "km", "color": "#e17055"},
+    {"name": "Sleep", "icon": "😴", "target": 8, "unit": "hours", "color": "#6c5ce7"},
+    {"name": "Water", "icon": "💧", "target": 8, "unit": "glasses", "color": "#00b894"},
+    {"name": "Reading", "icon": "📖", "target": 30, "unit": "pages", "color": "#a29bfe"},
+    {"name": "Meditation", "icon": "🧘", "target": 20, "unit": "minutes", "color": "#00cec9"},
+    {"name": "Exercise", "icon": "💪", "target": 30, "unit": "minutes", "color": "#fd79a8"},
+    {"name": "Healthy Eating", "icon": "🍎", "target": 5, "unit": "servings", "color": "#fdcb6e"},
+    {"name": "Learning", "icon": "💻", "target": 60, "unit": "minutes", "color": "#74b9ff"},
+]
 
-# ── Login-required decorator ──────────────────────────────────
+
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -131,9 +142,45 @@ def dashboard():
         completion_pct=completion_pct,
         best_streak=best_streak,
         weekly_data=weekly_data,
-        today=today
+        today=today,
+        templates=HABIT_TEMPLATES
     )
 
+# ── QUICK ADD TEMPLATE ───────────────────────────────────
+@app.route("/habit/add-template", methods=["POST"])
+@login_required
+def add_template_habit():
+    template_name = request.form.get("template_name", "").strip()
+    
+    template = next((t for t in HABIT_TEMPLATES if t["name"] == template_name), None)
+    if not template:
+        flash("Template not found.", "error")
+        return redirect(url_for("dashboard"))
+    
+    # Check if habit already exists
+    existing = Habit.query.filter_by(
+        user_id=session["user_id"],
+        name=template["name"]
+    ).first()
+    
+    if existing:
+        flash(f'You already have a "{template["name"]}" habit!', "warning")
+        return redirect(url_for("dashboard"))
+    
+    habit = Habit(
+        user_id=session["user_id"],
+        name=template["name"],
+        icon=template["icon"],
+        color=template["color"],
+        habit_type="countable",
+        target_value=template["target"],
+        unit=template["unit"]
+    )
+    db.session.add(habit)
+    db.session.commit()
+    
+    flash(f'🚀 Added "{template["name"]}" habit! Target: {template["target"]} {template["unit"]}/day', "success")
+    return redirect(url_for("dashboard"))
 
 # ── ADD HABIT ─────────────────────────────────────────────────
 @app.route("/habit/add", methods=["POST"])
